@@ -1,16 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { ScanResult, ScanError } from '@/lib/accessibility/types';
+import { PreviewModal } from '@/components/results/PreviewModal';
+import { EmailGateModal, type UserFormData } from '@/components/results/EmailGateModal';
 
 export function CheckerForm() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showEmailGate, setShowEmailGate] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check localStorage for authentication on mount
+  useEffect(() => {
+    const storedEmail = localStorage.getItem('userEmail');
+    if (storedEmail) {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const validateUrl = (input: string): { valid: boolean; error?: string } => {
     if (!input.trim()) {
@@ -89,17 +103,57 @@ export function CheckerForm() {
 
       const result: ScanResult = await response.json();
 
-      // TODO: Show results in modal or redirect to results page
-      console.log('Scan result:', result);
-      alert(
-        `✅ Análisis completado!\n\nScore: ${result.score}/100\nProblemas encontrados: ${result.summary.total}`
-      );
+      // Store result and show appropriate modal
+      setScanResult(result);
+
+      if (isAuthenticated) {
+        // If already authenticated, redirect to full results
+        // TODO: Navigate to /results page in FASE 8
+        console.log('User is authenticated, showing full results');
+        alert(
+          `✅ Análisis completado!\n\nScore: ${result.score}/100\nProblemas encontrados: ${result.summary.total}`
+        );
+      } else {
+        // Show preview modal for non-authenticated users
+        setShowPreview(true);
+      }
     } catch (err) {
       console.error('Error scanning:', err);
       setError('❌ Error al escanear el sitio. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
+    }
+  };
+
+  const handleUnlock = () => {
+    setShowPreview(false);
+    setShowEmailGate(true);
+  };
+
+  const handleEmailSubmit = async (formData: UserFormData) => {
+    try {
+      // Store email in localStorage for passwordless auth
+      localStorage.setItem('userEmail', formData.email);
+      localStorage.setItem('userName', formData.name);
+      if (formData.whatsapp) {
+        localStorage.setItem('userWhatsapp', formData.whatsapp);
+      }
+
+      setIsAuthenticated(true);
+      setShowEmailGate(false);
+
+      // TODO: In FASE 7, call API to save user data to database
+      console.log('User data to save:', formData);
+
+      // TODO: In FASE 8, navigate to full results page
+      // For now, show alert
+      alert(
+        `✅ ¡Reporte desbloqueado!\n\nScore: ${scanResult?.score}/100\nProblemas encontrados: ${scanResult?.summary.total}\n\nEn la siguiente fase, esto te redireccionará a la página de resultados completos.`
+      );
+    } catch (err) {
+      console.error('Error saving user data:', err);
+      setError('❌ Error al procesar tus datos. Intenta de nuevo.');
     }
   };
 
@@ -183,6 +237,23 @@ export function CheckerForm() {
           </p>
         </form>
       </Card>
+
+      {/* Modals */}
+      {scanResult && (
+        <>
+          <PreviewModal
+            isOpen={showPreview}
+            onClose={() => setShowPreview(false)}
+            onUnlock={handleUnlock}
+            result={scanResult}
+          />
+          <EmailGateModal
+            isOpen={showEmailGate}
+            onClose={() => setShowEmailGate(false)}
+            onSubmit={handleEmailSubmit}
+          />
+        </>
+      )}
     </section>
   );
 }
