@@ -1,0 +1,212 @@
+import puppeteer, { type Browser, type Page } from 'puppeteer';
+import type { AxeResults } from 'axe-core';
+import { calculateScore, calculateSummary } from './score-calculator';
+import type { ScanResult, Violation, ViolationNode } from './types';
+
+// Check if we're in production (Vercel)
+const isProduction = process.env.NODE_ENV === 'production';
+
+/**
+ * Launch Puppeteer browser instance
+ */
+async function launchBrowser(): Promise<Browser> {
+  if (isProduction) {
+    // Production: Use @sparticuz/chromium for Vercel
+    const chromium = await import('@sparticuz/chromium');
+
+    return puppeteer.launch({
+      args: chromium.default.args,
+      defaultViewport: chromium.default.defaultViewport,
+      executablePath: await chromium.default.executablePath(),
+      headless: chromium.default.headless,
+    });
+  }
+
+  // Development: Use local Chromium
+  return puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
+  });
+}
+
+/**
+ * Inject axe-core into the page
+ */
+async function injectAxeCore(page: Page): Promise<void> {
+  // Read axe-core source
+  const axeSource = await import('axe-core').then((axe) => axe.source);
+
+  // Inject into page
+  await page.evaluateOnNewDocument(axeSource);
+}
+
+/**
+ * Run axe-core analysis on the page
+ */
+async function runAxeAnalysis(page: Page): Promise<AxeResults> {
+  const results = await page.evaluate(async () => {
+    // @ts-ignore - axe is injected globally
+    return await window.axe.run({
+      runOnly: {
+        type: 'tag',
+        values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'],
+      },
+      resultTypes: ['violations', 'incomplete', 'passes'],
+      rules: {
+        'color-contrast': { enabled: true },
+        'valid-aria': { enabled: true },
+        label: { enabled: true },
+        'button-name': { enabled: true },
+        'link-name': { enabled: true },
+        'image-alt': { enabled: true },
+        'html-has-lang': { enabled: true },
+        'heading-order': { enabled: true },
+        'duplicate-id': { enabled: true },
+      },
+    });
+  });
+
+  return results as AxeResults;
+}
+
+/**
+ * Transform axe-core violations to our format
+ */
+function transformViolations(axeViolations: AxeResults['violations']): Violation[] {
+  return axeViolations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact as 'critical' | 'serious' | 'moderate' | 'minor',
+    description: violation.description,
+    help: violation.help,
+    helpUrl: violation.helpUrl,
+    tags: violation.tags,
+    nodes: violation.nodes.map((node) => ({
+      html: node.html,
+      target: node.target,
+      failureSummary: node.failureSummary || '',
+    })) as ViolationNode[],
+  }));
+}
+
+/**
+ * Validate URL format
+ */
+function validateUrl(url: string): { valid: boolean; error?: string } {
+  try {
+    const parsedUrl = new URL(url);
+
+    // Check protocol
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return { valid: false, error: 'URL debe usar protocolo HTTP o HTTPS' };
+    }
+
+    // Block localhost and internal IPs
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('172.')
+    ) {
+      return { valid: false, error: 'No se pueden escanear URLs locales o internas' };
+    }
+
+    // Check URL length
+    if (url.length > 2000) {
+      return { valid: false, error: 'URL demasiado larga' };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Formato de URL inválido' };
+  }
+}
+
+/**
+ * Main scanner function
+ * Scans a URL for WCAG accessibility violations
+ *
+ * @param url - The URL to scan
+ * @returns ScanResult with score and violations
+ * @throws Error if scan fails
+ */
+export async function scanUrl(url: string): Promise<ScanResult> {
+  // Validate URL
+  const validation = validateUrl(url);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  let browser: Browser | null = null;
+  let page: Page | null = null;
+
+  try {
+    // Launch browser
+    browser = await launchBrowser();
+    page = await browser.newPage();
+
+    // Set viewport
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    // Set user agent
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AccessibilityChecker/1.0'
+    );
+
+    // Navigate to URL with timeout
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout: 30000, // 30 seconds
+    });
+
+    // Inject axe-core
+    await injectAxeCore(page);
+
+    // Run axe analysis
+    const axeResults = await runAxeAnalysis(page);
+
+    // Transform violations
+    const violations = transformViolations(axeResults.violations);
+
+    // Calculate score
+    const score = calculateScore(violations);
+
+    // Calculate summary
+    const summary = calculateSummary(violations);
+
+    // Build result
+    const result: ScanResult = {
+      url,
+      score,
+      timestamp: new Date().toISOString(),
+      violations,
+      passes: axeResults.passes.length,
+      incomplete: axeResults.incomplete.length,
+      summary,
+    };
+
+    return result;
+  } catch (error) {
+    // Handle specific errors
+    if (error instanceof Error) {
+      if (error.message.includes('Navigation timeout')) {
+        throw new Error('Timeout: El sitio tardó demasiado en cargar (>30s)');
+      }
+      if (error.message.includes('net::ERR')) {
+        throw new Error('No se pudo acceder al sitio. Verifica que la URL esté online.');
+      }
+      throw error;
+    }
+    throw new Error('Error desconocido al escanear el sitio');
+  } finally {
+    // Cleanup
+    if (page) await page.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
