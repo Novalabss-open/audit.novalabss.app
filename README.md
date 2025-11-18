@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Website Accessibility Checker
 
-## Getting Started
+Herramienta gratuita de análisis de accesibilidad web que genera leads para NovaLabs mediante sistema de "email gate".
 
-First, run the development server:
+## 🚀 Stack Técnico
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Framework:** Next.js 16 (App Router)
+- **Styling:** Tailwind CSS v4 + shadcn/ui (violet-bloom theme)
+- **Scanner:** Puppeteer + axe-core (WCAG 2.1 AA/AAA)
+- **Database:** SQLite (better-sqlite3)
+- **Auth:** Passwordless (email + localStorage)
+- **Package Manager:** pnpm
+
+## 📋 Prerequisitos
+
+- Node.js 20+
+- pnpm 10+
+
+## 🛠️ Setup
+
+1. **Instalar dependencias:**
+   ```bash
+   pnpm install
+   ```
+
+2. **Configurar variables de entorno:**
+   ```bash
+   cp .env.example .env.local
+   ```
+
+3. **Iniciar servidor de desarrollo:**
+   ```bash
+   pnpm dev
+   ```
+
+4. **Abrir en navegador:**
+   ```
+   http://localhost:3000
+   ```
+
+## 📁 Estructura del Proyecto
+
+```
+access-checker/
+├── app/                    # Next.js App Router
+│   ├── api/               # API endpoints
+│   ├── results/           # Results page
+│   └── admin/             # Admin panel
+├── components/            # React components
+│   ├── home/             # Home page components
+│   ├── results/          # Results components
+│   ├── shared/           # Shared components
+│   └── ui/               # shadcn/ui components
+├── lib/                   # Core logic
+│   ├── accessibility/    # Scanner + scoring
+│   ├── db/               # SQLite operations
+│   └── email/            # Email templates
+├── types/                 # TypeScript types
+└── data/                  # SQLite database
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🗄️ Base de Datos
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+El proyecto usa SQLite con 2 tablas:
+- **users**: Registro de usuarios (email, nombre, whatsapp, sitio)
+- **scans**: Historial de análisis por usuario
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+La base de datos se crea automáticamente en `data/app.db` al iniciar.
 
-## Learn More
+## 🔧 Scripts Disponibles
 
-To learn more about Next.js, take a look at the following resources:
+- `pnpm dev` - Inicia servidor de desarrollo
+- `pnpm build` - Build para producción
+- `pnpm start` - Inicia servidor de producción
+- `pnpm lint` - Ejecuta ESLint
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📖 Documentación
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Ver [ROADMAP.md](./ROADMAP.md) para plan completo de implementación.
 
-## Deploy on Vercel
+## 🎨 Tema
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Usando tema **violet-bloom** customizado:
+- Primary color: `#7033ff` (purple)
+- Radius: `1.4rem` (rounded)
+- Fonts: Plus Jakarta Sans, Lora, IBM Plex Mono
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📄 Licencia
+
+MIT
+
+---
+
+**Hecho con 💜 por NovaLabs**
