@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
     "@sparticuz/chromium": "^141.0.0",
     "axe-core": "^4.11.0",
     "better-sqlite3": "^12.4.1",
