@@ -15,8 +15,16 @@ async function launchBrowser(): Promise<Browser> {
     // Production: Use @sparticuz/chromium for Vercel with puppeteer-core
     const chromium = await import('@sparticuz/chromium');
 
+    // Force chromium to install in /tmp for Vercel
+    chromium.default.setGraphicsMode = false;
+
     return puppeteerCore.launch({
-      args: chromium.default.args,
+      args: [
+        ...chromium.default.args,
+        '--disable-dev-shm-usage',
+        '--no-zygote',
+        '--single-process',
+      ],
       defaultViewport: chromium.default.defaultViewport,
       executablePath: await chromium.default.executablePath(),
       headless: chromium.default.headless,
