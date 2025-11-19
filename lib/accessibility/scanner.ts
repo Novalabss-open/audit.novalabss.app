@@ -1,4 +1,5 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteerCore from 'puppeteer-core';
 import type { AxeResults } from 'axe-core';
 import { calculateScore, calculateSummary } from './score-calculator';
 import type { ScanResult, Violation, ViolationNode } from './types';
@@ -11,13 +12,14 @@ const isProduction = process.env.NODE_ENV === 'production';
  */
 async function launchBrowser(): Promise<Browser> {
   if (isProduction) {
-    // Production: Use @sparticuz/chromium for Vercel
+    // Production: Use @sparticuz/chromium for Vercel with puppeteer-core
     const chromium = await import('@sparticuz/chromium');
 
-    return puppeteer.launch({
+    return puppeteerCore.launch({
       args: chromium.default.args,
+      defaultViewport: chromium.default.defaultViewport,
       executablePath: await chromium.default.executablePath(),
-      headless: true,
+      headless: chromium.default.headless,
     });
   }
 
