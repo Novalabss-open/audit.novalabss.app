@@ -6,11 +6,10 @@
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 60,
-      "memory": 1024
+      "memory": 2048
     }
   },
   "env": {
-    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true",
-    "PUPPETEER_EXECUTABLE_PATH": "/tmp/localChromium/chrome/linux-131.0.6778.87/chrome-linux64/chrome"
+    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true"
   }
 }
