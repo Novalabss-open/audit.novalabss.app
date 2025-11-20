@@ -1,0 +1,26 @@
+# Dokploy Configuration
+# Force Dokploy to use Docker Compose instead of Nixpacks
+
+# Deployment settings
+deploy:
+  type: docker-compose
+  composeFile: docker-compose.yml
+
+# Docker Compose settings
+compose:
+  file: docker-compose.yml
+  buildArgs: {}
+
+# Repository settings
+repository:
+  branch: dokploy
+  buildPath: .
+
+# Health check
+healthCheck:
+  enabled: true
+  path: /api/health
+  interval: 30
+  timeout: 10
+  retries: 3
+  startPeriod: 60
