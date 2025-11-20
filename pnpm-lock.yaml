@@ -20,6 +20,9 @@ importers:
       '@sparticuz/chromium':
         specifier: 131.0.1
         version: 131.0.1
+      axe-core:
+        specifier: ^4.11.0
+        version: 4.11.0
       better-sqlite3:
         specifier: ^12.4.1
         version: 12.4.1
@@ -66,9 +69,6 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.6)
-      axe-core:
-        specifier: ^4.11.0
-        version: 4.11.0
       eslint:
         specifier: ^9
         version: 9.39.1(jiti@2.6.1)
