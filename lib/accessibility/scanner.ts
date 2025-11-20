@@ -234,17 +234,6 @@ export async function scanUrl(url: string): Promise<ScanResult> {
           values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'],
         },
         resultTypes: ['violations', 'incomplete', 'passes'],
-        rules: {
-          'color-contrast': { enabled: true },
-          'valid-aria': { enabled: true },
-          label: { enabled: true },
-          'button-name': { enabled: true },
-          'link-name': { enabled: true },
-          'image-alt': { enabled: true },
-          'html-has-lang': { enabled: true },
-          'heading-order': { enabled: true },
-          'duplicate-id': { enabled: true },
-        },
       });
     });
 
