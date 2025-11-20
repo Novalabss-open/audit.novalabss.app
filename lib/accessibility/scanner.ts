@@ -1,9 +1,26 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import puppeteerCore from 'puppeteer-core';
-import { AxePuppeteer } from '@axe-core/puppeteer';
-import type { AxeResults } from 'axe-core';
 import { calculateScore, calculateSummary } from './score-calculator';
 import type { ScanResult, Violation, ViolationNode } from './types';
+
+// Define AxeResults type locally to avoid dependency
+interface AxeResults {
+  violations: Array<{
+    id: string;
+    impact?: string;
+    description: string;
+    help: string;
+    helpUrl: string;
+    tags: string[];
+    nodes: Array<{
+      html: string;
+      target: string[];
+      failureSummary?: string;
+    }>;
+  }>;
+  passes: Array<any>;
+  incomplete: Array<any>;
+}
 
 // Check if we're in production (Vercel)
 const isProduction = process.env.NODE_ENV === 'production';
@@ -166,10 +183,37 @@ export async function scanUrl(url: string): Promise<ScanResult> {
       timeout: 30000, // 30 seconds
     });
 
-    // Run axe analysis using @axe-core/puppeteer
-    const axeResults = await new AxePuppeteer(page)
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'])
-      .analyze();
+    // Inject axe-core from CDN (avoids module resolution issues)
+    await page.addScriptTag({
+      url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.11.0/axe.min.js',
+    });
+
+    // Wait for axe to be available
+    await page.waitForFunction(() => typeof (window as any).axe !== 'undefined', {
+      timeout: 5000,
+    });
+
+    // Run axe analysis
+    const axeResults: AxeResults = await page.evaluate(() => {
+      return (window as any).axe.run({
+        runOnly: {
+          type: 'tag',
+          values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'],
+        },
+        resultTypes: ['violations', 'incomplete', 'passes'],
+        rules: {
+          'color-contrast': { enabled: true },
+          'valid-aria': { enabled: true },
+          label: { enabled: true },
+          'button-name': { enabled: true },
+          'link-name': { enabled: true },
+          'image-alt': { enabled: true },
+          'html-has-lang': { enabled: true },
+          'heading-order': { enabled: true },
+          'duplicate-id': { enabled: true },
+        },
+      });
+    });
 
     // Transform violations
     const violations = transformViolations(axeResults.violations);

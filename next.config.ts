@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
 
   // Configure Puppeteer for Docker
   experimental: {
-    serverComponentsExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium', 'axe-core', '@axe-core/puppeteer'],
+    serverComponentsExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium'],
   },
 };
 
