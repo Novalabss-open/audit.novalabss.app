@@ -35,6 +35,10 @@ async function launchBrowser(): Promise<Browser> {
           '--safebrowsing-disable-auto-update',
           '--single-process',
           '--no-zygote',
+          // Fix crashpad handler error
+          '--disable-crash-reporter',
+          '--disable-breakpad',
+          '--user-data-dir=/tmp/chrome-profile',
         ],
         headless: true,
         defaultViewport: { width: 1920, height: 1080 },
