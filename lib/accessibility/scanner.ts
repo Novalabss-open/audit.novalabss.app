@@ -1,5 +1,6 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import puppeteerCore from 'puppeteer-core';
+import { readFileSync } from 'fs';
 import { calculateScore, calculateSummary } from './score-calculator';
 import type { ScanResult, Violation, ViolationNode } from './types';
 
@@ -177,21 +178,37 @@ export async function scanUrl(url: string): Promise<ScanResult> {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AccessibilityChecker/1.0'
     );
 
+    // Bypass CSP to allow script injection
+    await page.setBypassCSP(true);
+
     // Navigate to URL with timeout
     await page.goto(url, {
       waitUntil: 'networkidle2',
       timeout: 30000, // 30 seconds
     });
 
-    // Inject axe-core from CDN (avoids module resolution issues)
-    await page.addScriptTag({
-      url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.11.0/axe.min.js',
-    });
+    // Inject axe-core with CDN fallback to local
+    try {
+      // Try CDN first (faster if it works)
+      await page.addScriptTag({
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.11.0/axe.min.js',
+      });
 
-    // Wait for axe to be available
-    await page.waitForFunction(() => typeof (window as any).axe !== 'undefined', {
-      timeout: 5000,
-    });
+      // Wait for axe to be available
+      await page.waitForFunction(() => typeof (window as any).axe !== 'undefined', {
+        timeout: 3000,
+      });
+    } catch (cdnError) {
+      // Fallback: inject from local file
+      console.log('CDN failed, using local axe-core');
+      const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+      await page.evaluate(axeSource);
+
+      // Verify injection worked
+      await page.waitForFunction(() => typeof (window as any).axe !== 'undefined', {
+        timeout: 2000,
+      });
+    }
 
     // Run axe analysis
     const axeResults: AxeResults = await page.evaluate(() => {
