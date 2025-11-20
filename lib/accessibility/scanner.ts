@@ -12,23 +12,50 @@ const isProduction = process.env.NODE_ENV === 'production';
  */
 async function launchBrowser(): Promise<Browser> {
   if (isProduction) {
-    // Production: Use @sparticuz/chromium for Vercel with puppeteer-core
-    const chromium = await import('@sparticuz/chromium');
+    // Check if we're running in Docker (custom Chromium path)
+    const isDocker = process.env.PUPPETEER_EXECUTABLE_PATH;
 
-    // Force chromium to install in /tmp for Vercel
-    chromium.default.setGraphicsMode = false;
+    if (isDocker) {
+      // Docker: Use system Chromium with puppeteer-core
+      return puppeteerCore.launch({
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--mute-audio',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--single-process',
+          '--no-zygote',
+        ],
+        headless: true,
+        defaultViewport: { width: 1920, height: 1080 },
+      });
+    } else {
+      // Vercel: Use @sparticuz/chromium
+      const chromium = await import('@sparticuz/chromium');
+      chromium.default.setGraphicsMode = false;
 
-    return puppeteerCore.launch({
-      args: [
-        ...chromium.default.args,
-        '--disable-dev-shm-usage',
-        '--no-zygote',
-        '--single-process',
-      ],
-      defaultViewport: chromium.default.defaultViewport,
-      executablePath: await chromium.default.executablePath(),
-      headless: chromium.default.headless,
-    });
+      return puppeteerCore.launch({
+        args: [
+          ...chromium.default.args,
+          '--disable-dev-shm-usage',
+          '--no-zygote',
+          '--single-process',
+        ],
+        defaultViewport: chromium.default.defaultViewport,
+        executablePath: await chromium.default.executablePath(),
+        headless: chromium.default.headless,
+      });
+    }
   }
 
   // Development: Use local Chromium
