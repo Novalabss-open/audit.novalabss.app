@@ -1,5 +1,6 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import puppeteerCore from 'puppeteer-core';
+import { AxePuppeteer } from '@axe-core/puppeteer';
 import type { AxeResults } from 'axe-core';
 import { calculateScore, calculateSummary } from './score-calculator';
 import type { ScanResult, Violation, ViolationNode } from './types';
@@ -72,46 +73,6 @@ async function launchBrowser(): Promise<Browser> {
       '--disable-gpu',
     ],
   });
-}
-
-/**
- * Inject axe-core into the page
- */
-async function injectAxeCore(page: Page): Promise<void> {
-  // Read axe-core source
-  const axeSource = await import('axe-core').then((axe) => axe.source);
-
-  // Inject into page
-  await page.evaluateOnNewDocument(axeSource);
-}
-
-/**
- * Run axe-core analysis on the page
- */
-async function runAxeAnalysis(page: Page): Promise<AxeResults> {
-  const results = await page.evaluate(async () => {
-    // @ts-ignore - axe is injected globally
-    return await window.axe.run({
-      runOnly: {
-        type: 'tag',
-        values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'],
-      },
-      resultTypes: ['violations', 'incomplete', 'passes'],
-      rules: {
-        'color-contrast': { enabled: true },
-        'valid-aria': { enabled: true },
-        label: { enabled: true },
-        'button-name': { enabled: true },
-        'link-name': { enabled: true },
-        'image-alt': { enabled: true },
-        'html-has-lang': { enabled: true },
-        'heading-order': { enabled: true },
-        'duplicate-id': { enabled: true },
-      },
-    });
-  });
-
-  return results as AxeResults;
 }
 
 /**
@@ -205,11 +166,10 @@ export async function scanUrl(url: string): Promise<ScanResult> {
       timeout: 30000, // 30 seconds
     });
 
-    // Inject axe-core
-    await injectAxeCore(page);
-
-    // Run axe analysis
-    const axeResults = await runAxeAnalysis(page);
+    // Run axe analysis using @axe-core/puppeteer
+    const axeResults = await new AxePuppeteer(page)
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'])
+      .analyze();
 
     // Transform violations
     const violations = transformViolations(axeResults.violations);

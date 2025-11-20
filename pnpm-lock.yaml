@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@axe-core/puppeteer':
+        specifier: ^4.11.0
+        version: 4.11.0(puppeteer@24.30.0(typescript@5.9.3))
       '@radix-ui/react-dialog':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.6))(@types/react@19.2.6)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -90,6 +93,12 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@axe-core/puppeteer@4.11.0':
+    resolution: {integrity: sha512-KDtKL0kGzm00VA2ZM8ZZwKq1L37iEeF4N+Aweq+eHokQwMCxX3dtie1ts5elfINROUO36DoBnslMmHhdqxve/g==}
+    engines: {node: '>=6.4.0'}
+    peerDependencies:
+      puppeteer: '>=1.10.0'
 
   '@babel/code-frame@7.27.1':
     resolution: {integrity: sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==}
@@ -2676,6 +2685,11 @@ packages:
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@axe-core/puppeteer@4.11.0(puppeteer@24.30.0(typescript@5.9.3))':
+    dependencies:
+      axe-core: 4.11.0
+      puppeteer: 24.30.0(typescript@5.9.3)
 
   '@babel/code-frame@7.27.1':
     dependencies:
