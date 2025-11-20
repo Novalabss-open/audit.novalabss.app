@@ -1,6 +1,7 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import puppeteerCore from 'puppeteer-core';
 import { readFileSync } from 'fs';
+import { join } from 'path';
 import { calculateScore, calculateSummary } from './score-calculator';
 import type { ScanResult, Violation, ViolationNode } from './types';
 
@@ -199,9 +200,24 @@ export async function scanUrl(url: string): Promise<ScanResult> {
         timeout: 3000,
       });
     } catch (cdnError) {
-      // Fallback: inject from local file
-      console.log('CDN failed, using local axe-core');
-      const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+      // Fallback: inject from local file in public directory
+      console.log('CDN failed, using local axe-core from public directory');
+
+      // Try multiple possible paths (dev vs production)
+      let axeSource: string;
+      try {
+        // Production: Next.js standalone
+        axeSource = readFileSync(join(process.cwd(), 'public/axe.min.js'), 'utf8');
+      } catch {
+        try {
+          // Development or alternative path
+          axeSource = readFileSync(join(process.cwd(), '../public/axe.min.js'), 'utf8');
+        } catch {
+          // Last resort: try node_modules
+          axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+        }
+      }
+
       await page.evaluate(axeSource);
 
       // Verify injection worked

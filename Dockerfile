@@ -129,6 +129,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/lib/db/schema.sql ./lib/db/schema.sql
+# Copy axe-core for fallback injection
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
 
 # Create data directory for SQLite and set permissions
 RUN mkdir -p /app/data \
