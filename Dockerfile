@@ -150,19 +150,18 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/lib/db/schema.sql ./lib/db/schema.sql
+
+# Copy better-sqlite3 with compiled bindings from builder
+# This is necessary because standalone output doesn't include native modules
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
+
 # Copy axe-core for fallback injection
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
 
-# Copy package.json and pnpm-lock.yaml for better-sqlite3 rebuild
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
-
-# Install only better-sqlite3 and rebuild for the runtime environment
-# Use --ignore-scripts=false to force build scripts to run
-RUN pnpm add better-sqlite3@12.4.1 --prod --ignore-scripts=false
-
 # Create data directory for SQLite and Chromium cache with permissions
 RUN mkdir -p /app/data /tmp/.chromium && \
-    chown -R nextjs:nodejs /app/data /app/node_modules /tmp/.chromium && \
+    chown -R nextjs:nodejs /app/data /tmp/.chromium && \
     chmod -R 755 /app/data /tmp/.chromium
 
 # Switch to non-root user
