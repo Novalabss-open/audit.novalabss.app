@@ -165,6 +165,11 @@ RUN mkdir -p /app/data \
     && chmod -R 755 /app/data \
     && chown -R nextjs:nodejs /app/node_modules
 
+# Create Chromium directories with proper permissions
+RUN mkdir -p /tmp/.chromium \
+    && chown -R nextjs:nodejs /tmp/.chromium \
+    && chmod -R 755 /tmp/.chromium
+
 # Switch to non-root user
 USER nextjs
 
