@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { checkUserExists } from '@/lib/db/users';
 import type { CheckEmailRequest, CheckEmailResponse, ApiError } from '@/types/api';
 
+// Force dynamic route - don't prerender during build
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 /**
  * POST /api/auth/check-email
  *

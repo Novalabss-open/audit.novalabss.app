@@ -44,6 +44,11 @@ let dbInstance: Database.Database | null = null;
  * Initializes on first call
  */
 export function getDb(): Database.Database {
+  // Skip initialization during build time
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    throw new Error('Database should not be accessed during build time');
+  }
+
   if (!dbInstance) {
     dbInstance = initializeDatabase();
   }
@@ -60,6 +65,3 @@ export function closeDb(): void {
     dbInstance = null;
   }
 }
-
-// Export db instance as default
-export default getDb();
