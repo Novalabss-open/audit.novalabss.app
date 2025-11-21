@@ -1,5 +1,3 @@
-import type { Result as AxeResult, NodeResult } from 'axe-core';
-
 export type Severity = 'critical' | 'serious' | 'moderate' | 'minor';
 
 export interface Violation {

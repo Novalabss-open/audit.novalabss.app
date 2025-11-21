@@ -1,8 +1,28 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import puppeteerCore from 'puppeteer-core';
-import type { AxeResults } from 'axe-core';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { calculateScore, calculateSummary } from './score-calculator';
 import type { ScanResult, Violation, ViolationNode } from './types';
+
+// Define AxeResults type locally to avoid dependency
+interface AxeResults {
+  violations: Array<{
+    id: string;
+    impact?: string;
+    description: string;
+    help: string;
+    helpUrl: string;
+    tags: string[];
+    nodes: Array<{
+      html: string;
+      target: string[];
+      failureSummary?: string;
+    }>;
+  }>;
+  passes: Array<any>;
+  incomplete: Array<any>;
+}
 
 // Check if we're in production (Vercel)
 const isProduction = process.env.NODE_ENV === 'production';
@@ -12,23 +32,54 @@ const isProduction = process.env.NODE_ENV === 'production';
  */
 async function launchBrowser(): Promise<Browser> {
   if (isProduction) {
-    // Production: Use @sparticuz/chromium for Vercel with puppeteer-core
-    const chromium = await import('@sparticuz/chromium');
+    // Check if we're running in Docker (custom Chromium path)
+    const isDocker = process.env.PUPPETEER_EXECUTABLE_PATH;
 
-    // Force chromium to install in /tmp for Vercel
-    chromium.default.setGraphicsMode = false;
+    if (isDocker) {
+      // Docker: Use system Chromium with puppeteer-core
+      return puppeteerCore.launch({
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--mute-audio',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--single-process',
+          '--no-zygote',
+          // Fix crashpad handler error
+          '--disable-crash-reporter',
+          '--disable-breakpad',
+          '--user-data-dir=/tmp/chrome-profile',
+        ],
+        headless: true,
+        defaultViewport: { width: 1920, height: 1080 },
+      });
+    } else {
+      // Vercel: Use @sparticuz/chromium
+      const chromium = await import('@sparticuz/chromium');
+      chromium.default.setGraphicsMode = false;
 
-    return puppeteerCore.launch({
-      args: [
-        ...chromium.default.args,
-        '--disable-dev-shm-usage',
-        '--no-zygote',
-        '--single-process',
-      ],
-      defaultViewport: chromium.default.defaultViewport,
-      executablePath: await chromium.default.executablePath(),
-      headless: chromium.default.headless,
-    });
+      return puppeteerCore.launch({
+        args: [
+          ...chromium.default.args,
+          '--disable-dev-shm-usage',
+          '--no-zygote',
+          '--single-process',
+        ],
+        defaultViewport: chromium.default.defaultViewport,
+        executablePath: await chromium.default.executablePath(),
+        headless: chromium.default.headless,
+      });
+    }
   }
 
   // Development: Use local Chromium
@@ -41,46 +92,6 @@ async function launchBrowser(): Promise<Browser> {
       '--disable-gpu',
     ],
   });
-}
-
-/**
- * Inject axe-core into the page
- */
-async function injectAxeCore(page: Page): Promise<void> {
-  // Read axe-core source
-  const axeSource = await import('axe-core').then((axe) => axe.source);
-
-  // Inject into page
-  await page.evaluateOnNewDocument(axeSource);
-}
-
-/**
- * Run axe-core analysis on the page
- */
-async function runAxeAnalysis(page: Page): Promise<AxeResults> {
-  const results = await page.evaluate(async () => {
-    // @ts-ignore - axe is injected globally
-    return await window.axe.run({
-      runOnly: {
-        type: 'tag',
-        values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'],
-      },
-      resultTypes: ['violations', 'incomplete', 'passes'],
-      rules: {
-        'color-contrast': { enabled: true },
-        'valid-aria': { enabled: true },
-        label: { enabled: true },
-        'button-name': { enabled: true },
-        'link-name': { enabled: true },
-        'image-alt': { enabled: true },
-        'html-has-lang': { enabled: true },
-        'heading-order': { enabled: true },
-        'duplicate-id': { enabled: true },
-      },
-    });
-  });
-
-  return results as AxeResults;
 }
 
 /**
@@ -168,17 +179,63 @@ export async function scanUrl(url: string): Promise<ScanResult> {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AccessibilityChecker/1.0'
     );
 
+    // Bypass CSP to allow script injection
+    await page.setBypassCSP(true);
+
     // Navigate to URL with timeout
     await page.goto(url, {
       waitUntil: 'networkidle2',
       timeout: 30000, // 30 seconds
     });
 
-    // Inject axe-core
-    await injectAxeCore(page);
+    // Inject axe-core with CDN fallback to local
+    try {
+      // Try CDN first (faster if it works)
+      await page.addScriptTag({
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.11.0/axe.min.js',
+      });
+
+      // Wait for axe to be available
+      await page.waitForFunction(() => typeof (window as any).axe !== 'undefined', {
+        timeout: 3000,
+      });
+    } catch (cdnError) {
+      // Fallback: inject from local file in public directory
+      console.log('CDN failed, using local axe-core from public directory');
+
+      // Try multiple possible paths (dev vs production)
+      let axeSource: string;
+      try {
+        // Production: Next.js standalone
+        axeSource = readFileSync(join(process.cwd(), 'public/axe.min.js'), 'utf8');
+      } catch {
+        try {
+          // Development or alternative path
+          axeSource = readFileSync(join(process.cwd(), '../public/axe.min.js'), 'utf8');
+        } catch {
+          // Last resort: try node_modules
+          axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+        }
+      }
+
+      await page.evaluate(axeSource);
+
+      // Verify injection worked
+      await page.waitForFunction(() => typeof (window as any).axe !== 'undefined', {
+        timeout: 2000,
+      });
+    }
 
     // Run axe analysis
-    const axeResults = await runAxeAnalysis(page);
+    const axeResults: AxeResults = await page.evaluate(() => {
+      return (window as any).axe.run({
+        runOnly: {
+          type: 'tag',
+          values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag21a', 'best-practice'],
+        },
+        resultTypes: ['violations', 'incomplete', 'passes'],
+      });
+    });
 
     // Transform violations
     const violations = transformViolations(axeResults.violations);
