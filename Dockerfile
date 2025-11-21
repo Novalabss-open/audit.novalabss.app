@@ -56,15 +56,6 @@ RUN pnpm install --frozen-lockfile
 # Stage 2: Builder
 FROM node:20-bookworm-slim AS builder
 
-# Install build dependencies for better-sqlite3
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    gcc \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install pnpm
 RUN npm install -g pnpm@latest
 
@@ -73,11 +64,6 @@ WORKDIR /app
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Rebuild better-sqlite3 for the current platform
-RUN pnpm rebuild better-sqlite3 && \
-    echo "=== Checking better-sqlite3 bindings ===" && \
-    find node_modules/.pnpm/better-sqlite3* -name "*.node" -o -name "build" -type d | head -20
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -90,14 +76,8 @@ RUN pnpm run build
 # Stage 3: Runner
 FROM node:20-bookworm-slim AS runner
 
-# Install runtime dependencies for Chromium AND build tools for better-sqlite3
+# Install runtime dependencies for Chromium
 RUN apt-get update && apt-get install -y \
-    # Build tools for better-sqlite3
-    python3 \
-    make \
-    g++ \
-    gcc \
-    # Chromium
     chromium \
     chromium-sandbox \
     fonts-ipafont-gothic \
@@ -153,18 +133,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/lib/db/schema.sql ./lib/db/schema.sql
 
-# Copy better-sqlite3 with compiled bindings from builder
-# This is necessary because standalone output doesn't include native modules
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
-
 # Copy axe-core for fallback injection
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
 
-# Create data directory for SQLite and Chromium cache with permissions
-RUN mkdir -p /app/data /tmp/.chromium && \
-    chown -R nextjs:nodejs /app/data /tmp/.chromium && \
-    chmod -R 755 /app/data /tmp/.chromium
+# Create Chromium cache directory with permissions
+RUN mkdir -p /tmp/.chromium && \
+    chown -R nextjs:nodejs /tmp/.chromium && \
+    chmod -R 755 /tmp/.chromium
 
 # Switch to non-root user
 USER nextjs

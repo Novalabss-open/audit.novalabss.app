@@ -1,62 +1,103 @@
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import { readFileSync } from 'fs';
 import path from 'path';
-
-// Database file path
-const DB_PATH = path.join(process.cwd(), 'data', 'app.db');
 
 // Schema file path
 const SCHEMA_PATH = path.join(process.cwd(), 'lib', 'db', 'schema.sql');
 
 /**
- * Initialize SQLite database
- * Creates database file and runs schema if needed
+ * PostgreSQL connection pool configuration
  */
-function initializeDatabase(): Database.Database {
-  // Create database connection
-  const db = new Database(DB_PATH, {
-    verbose: process.env.NODE_ENV === 'development' ? console.log : undefined,
-  });
+const poolConfig = {
+  connectionString: process.env.DATABASE_URL,
+  // Pool settings
+  max: 20, // maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // close idle clients after 30s
+  connectionTimeoutMillis: 2000, // timeout when establishing connection
+};
 
-  // Enable foreign keys
-  db.pragma('foreign_keys = ON');
-
-  // Enable WAL mode for better performance
-  db.pragma('journal_mode = WAL');
-
-  // Read and execute schema
+/**
+ * Initialize PostgreSQL database
+ * Creates tables and runs schema if needed
+ */
+async function initializeDatabase(pool: Pool): Promise<void> {
   try {
+    // Read and execute schema
     const schema = readFileSync(SCHEMA_PATH, 'utf-8');
-    db.exec(schema);
+    await pool.query(schema);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✓ PostgreSQL database schema initialized successfully');
+    }
   } catch (error) {
     console.error('Error initializing database schema:', error);
     throw error;
   }
-
-  return db;
 }
 
-// Singleton database instance
-let dbInstance: Database.Database | null = null;
+// Singleton pool instance
+let poolInstance: Pool | null = null;
+let initPromise: Promise<void> | null = null;
 
 /**
- * Get database instance (singleton)
+ * Get database pool instance (singleton)
  * Initializes on first call
  */
-export function getDb(): Database.Database {
-  if (!dbInstance) {
-    dbInstance = initializeDatabase();
+export async function getPool(): Promise<Pool> {
+  if (!poolInstance) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is not set');
+    }
+
+    poolInstance = new Pool(poolConfig);
+
+    // Handle pool errors
+    poolInstance.on('error', (err) => {
+      console.error('Unexpected database pool error:', err);
+    });
+
+    // Initialize schema only once
+    if (!initPromise) {
+      initPromise = initializeDatabase(poolInstance);
+    }
+    await initPromise;
   }
-  return dbInstance;
+
+  return poolInstance;
 }
 
 /**
- * Close database connection
+ * Execute a query with the pool
+ * Helper function for common queries
+ */
+export async function query<T = any>(
+  text: string,
+  params?: any[]
+): Promise<T[]> {
+  const pool = await getPool();
+  const result = await pool.query(text, params);
+  return result.rows as T[];
+}
+
+/**
+ * Execute a query that returns a single row
+ */
+export async function queryOne<T = any>(
+  text: string,
+  params?: any[]
+): Promise<T | null> {
+  const rows = await query<T>(text, params);
+  return rows.length > 0 ? rows[0] : null;
+}
+
+/**
+ * Close database connection pool
  * Useful for testing and cleanup
  */
-export function closeDb(): void {
-  if (dbInstance) {
-    dbInstance.close();
-    dbInstance = null;
+export async function closePool(): Promise<void> {
+  if (poolInstance) {
+    await poolInstance.end();
+    poolInstance = null;
+    initPromise = null;
   }
 }

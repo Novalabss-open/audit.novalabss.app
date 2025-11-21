@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     }
 
     // Check if user exists
-    const user = checkUserExists(email);
+    const user = await checkUserExists(email);
 
     if (user) {
       const response: CheckEmailResponse = {

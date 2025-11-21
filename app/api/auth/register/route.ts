@@ -83,14 +83,14 @@ export async function POST(request: Request) {
     }
 
     // Check if user already exists
-    const existingUser = checkUserExists(email);
+    const existingUser = await checkUserExists(email);
 
     if (existingUser) {
       // User exists - just update last_seen
-      updateLastSeen(existingUser.id);
+      await updateLastSeen(existingUser.id);
 
       // Get updated user
-      const updatedUser = checkUserExists(email);
+      const updatedUser = await checkUserExists(email);
 
       const response: RegisterResponse = {
         success: true,
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     }
 
     // Create new user
-    const userId = createUser({
+    const userId = await createUser({
       email,
       name,
       whatsapp,
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     });
 
     // Get created user
-    const newUser = checkUserExists(email);
+    const newUser = await checkUserExists(email);
 
     if (!newUser) {
       throw new Error('Failed to retrieve created user');

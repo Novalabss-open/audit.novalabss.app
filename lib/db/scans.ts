@@ -1,4 +1,4 @@
-import { getDb } from './client';
+import { query, queryOne } from './client';
 import type { ScanResult } from '@/lib/accessibility/types';
 
 export interface Scan {
@@ -23,18 +23,15 @@ export interface ScanWithParsedViolations extends Omit<Scan, 'violations_json'> 
  * Save scan result to database
  * Returns scan ID
  */
-export function saveScan(userId: number, scanResult: ScanResult): number {
-  const db = getDb();
-
-  const stmt = db.prepare(`
+export async function saveScan(userId: number, scanResult: ScanResult): Promise<number> {
+  const result = await query<{ id: number }>(`
     INSERT INTO scans (
       user_id, url, score, violations_count,
       critical_count, serious_count, moderate_count, minor_count,
       violations_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const result = stmt.run(
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    RETURNING id
+  `, [
     userId,
     scanResult.url,
     scanResult.score,
@@ -44,26 +41,22 @@ export function saveScan(userId: number, scanResult: ScanResult): number {
     scanResult.summary.moderate,
     scanResult.summary.minor,
     JSON.stringify(scanResult.violations)
-  );
+  ]);
 
-  return result.lastInsertRowid as number;
+  return result[0].id;
 }
 
 /**
  * Get user's scan history
  * Returns most recent scans first
  */
-export function getUserScans(userId: number, limit = 10): ScanWithParsedViolations[] {
-  const db = getDb();
-
-  const stmt = db.prepare(`
+export async function getUserScans(userId: number, limit = 10): Promise<ScanWithParsedViolations[]> {
+  const scans = await query<Scan>(`
     SELECT * FROM scans
-    WHERE user_id = ?
+    WHERE user_id = $1
     ORDER BY scanned_at DESC
-    LIMIT ?
-  `);
-
-  const scans = stmt.all(userId, limit) as Scan[];
+    LIMIT $2
+  `, [userId, limit]);
 
   // Parse violations JSON
   return scans.map((scan) => ({
@@ -75,11 +68,11 @@ export function getUserScans(userId: number, limit = 10): ScanWithParsedViolatio
 /**
  * Get scan by ID
  */
-export function getScanById(scanId: number): ScanWithParsedViolations | null {
-  const db = getDb();
-
-  const stmt = db.prepare('SELECT * FROM scans WHERE id = ?');
-  const scan = stmt.get(scanId) as Scan | undefined;
+export async function getScanById(scanId: number): Promise<ScanWithParsedViolations | null> {
+  const scan = await queryOne<Scan>(
+    'SELECT * FROM scans WHERE id = $1',
+    [scanId]
+  );
 
   if (!scan) return null;
 
@@ -93,20 +86,16 @@ export function getScanById(scanId: number): ScanWithParsedViolations | null {
  * Get user's scan for specific URL
  * Returns most recent scan for that URL
  */
-export function getUserScanForUrl(
+export async function getUserScanForUrl(
   userId: number,
   url: string
-): ScanWithParsedViolations | null {
-  const db = getDb();
-
-  const stmt = db.prepare(`
+): Promise<ScanWithParsedViolations | null> {
+  const scan = await queryOne<Scan>(`
     SELECT * FROM scans
-    WHERE user_id = ? AND url = ?
+    WHERE user_id = $1 AND url = $2
     ORDER BY scanned_at DESC
     LIMIT 1
-  `);
-
-  const scan = stmt.get(userId, url) as Scan | undefined;
+  `, [userId, url]);
 
   if (!scan) return null;
 
@@ -119,62 +108,59 @@ export function getUserScanForUrl(
 /**
  * Get all scans count for a user
  */
-export function getUserScansCount(userId: number): number {
-  const db = getDb();
-
-  const stmt = db.prepare('SELECT COUNT(*) as count FROM scans WHERE user_id = ?');
-  const result = stmt.get(userId) as { count: number };
-  return result.count;
+export async function getUserScansCount(userId: number): Promise<number> {
+  const result = await queryOne<{ count: string }>(
+    'SELECT COUNT(*) as count FROM scans WHERE user_id = $1',
+    [userId]
+  );
+  return parseInt(result?.count || '0');
 }
 
 /**
  * Get average score for a user
  */
-export function getUserAverageScore(userId: number): number | null {
-  const db = getDb();
-
-  const stmt = db.prepare('SELECT AVG(score) as avgScore FROM scans WHERE user_id = ?');
-  const result = stmt.get(userId) as { avgScore: number | null };
-  return result.avgScore;
+export async function getUserAverageScore(userId: number): Promise<number | null> {
+  const result = await queryOne<{ avgScore: number | null }>(
+    'SELECT AVG(score) as avgScore FROM scans WHERE user_id = $1',
+    [userId]
+  );
+  return result?.avgScore || null;
 }
 
 /**
  * Get all scans (for admin)
  */
-export function getAllScans(limit = 100, offset = 0): Scan[] {
-  const db = getDb();
-
-  const stmt = db.prepare(`
+export async function getAllScans(limit = 100, offset = 0): Promise<Scan[]> {
+  return await query<Scan>(`
     SELECT * FROM scans
     ORDER BY scanned_at DESC
-    LIMIT ? OFFSET ?
-  `);
-
-  return stmt.all(limit, offset) as Scan[];
+    LIMIT $1 OFFSET $2
+  `, [limit, offset]);
 }
 
 /**
  * Get total scans count (for admin)
  */
-export function getTotalScansCount(): number {
-  const db = getDb();
-
-  const stmt = db.prepare('SELECT COUNT(*) as count FROM scans');
-  const result = stmt.get() as { count: number };
-  return result.count;
+export async function getTotalScansCount(): Promise<number> {
+  const result = await queryOne<{ count: string }>(
+    'SELECT COUNT(*) as count FROM scans'
+  );
+  return parseInt(result?.count || '0');
 }
 
 /**
  * Get scan statistics (for admin)
  */
-export function getScanStats(): {
+export async function getScanStats(): Promise<{
   totalScans: number;
   avgScore: number;
   avgViolations: number;
-} {
-  const db = getDb();
-
-  const stmt = db.prepare(`
+}> {
+  const result = await queryOne<{
+    totalScans: string;
+    avgScore: number;
+    avgViolations: number;
+  }>(`
     SELECT
       COUNT(*) as totalScans,
       AVG(score) as avgScore,
@@ -182,31 +168,23 @@ export function getScanStats(): {
     FROM scans
   `);
 
-  const result = stmt.get() as {
-    totalScans: number;
-    avgScore: number;
-    avgViolations: number;
+  return {
+    totalScans: parseInt(result?.totalScans || '0'),
+    avgScore: result?.avgScore || 0,
+    avgViolations: result?.avgViolations || 0,
   };
-
-  return result;
 }
 
 /**
  * Delete scan (for testing/admin)
  */
-export function deleteScan(scanId: number): void {
-  const db = getDb();
-
-  const stmt = db.prepare('DELETE FROM scans WHERE id = ?');
-  stmt.run(scanId);
+export async function deleteScan(scanId: number): Promise<void> {
+  await query('DELETE FROM scans WHERE id = $1', [scanId]);
 }
 
 /**
  * Delete all scans for a user (for testing/admin)
  */
-export function deleteUserScans(userId: number): void {
-  const db = getDb();
-
-  const stmt = db.prepare('DELETE FROM scans WHERE user_id = ?');
-  stmt.run(userId);
+export async function deleteUserScans(userId: number): Promise<void> {
+  await query('DELETE FROM scans WHERE user_id = $1', [userId]);
 }

@@ -1,24 +1,24 @@
 -- Database schema for Website Accessibility Checker
--- SQLite database with 2 main tables: users and scans
+-- PostgreSQL database with 2 main tables: users and scans
 
 -- Table 1: users
 -- Stores user registration information (email gate data)
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   whatsapp TEXT,
-  has_website BOOLEAN DEFAULT 0,
+  has_website BOOLEAN DEFAULT FALSE,
   website_url TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   total_scans INTEGER DEFAULT 0
 );
 
 -- Table 2: scans
 -- Stores scan history for each user
 CREATE TABLE IF NOT EXISTS scans (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL,
   url TEXT NOT NULL,
   score INTEGER NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS scans (
   moderate_count INTEGER DEFAULT 0,
   minor_count INTEGER DEFAULT 0,
   violations_json TEXT,
-  scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
