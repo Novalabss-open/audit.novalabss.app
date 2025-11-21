@@ -157,18 +157,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 
 # Install only better-sqlite3 and rebuild for the runtime environment
-RUN pnpm add better-sqlite3@12.4.1 --prod
+# Use --ignore-scripts=false to force build scripts to run
+RUN pnpm add better-sqlite3@12.4.1 --prod --ignore-scripts=false
 
-# Create data directory for SQLite and set permissions
-RUN mkdir -p /app/data \
-    && chown -R nextjs:nodejs /app/data \
-    && chmod -R 755 /app/data \
-    && chown -R nextjs:nodejs /app/node_modules
-
-# Create Chromium directories with proper permissions
-RUN mkdir -p /tmp/.chromium \
-    && chown -R nextjs:nodejs /tmp/.chromium \
-    && chmod -R 755 /tmp/.chromium
+# Create data directory for SQLite and Chromium cache with permissions
+RUN mkdir -p /app/data /tmp/.chromium && \
+    chown -R nextjs:nodejs /app/data /app/node_modules /tmp/.chromium && \
+    chmod -R 755 /app/data /tmp/.chromium
 
 # Switch to non-root user
 USER nextjs
