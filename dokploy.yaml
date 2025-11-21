@@ -13,7 +13,7 @@ compose:
 
 # Repository settings
 repository:
-  branch: dokploy
+  branch: staging
   buildPath: .
 
 # Health check
