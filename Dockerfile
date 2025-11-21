@@ -56,6 +56,15 @@ RUN pnpm install --frozen-lockfile
 # Stage 2: Builder
 FROM node:20-bookworm-slim AS builder
 
+# Install build dependencies for better-sqlite3
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    gcc \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install pnpm
 RUN npm install -g pnpm@latest
 
@@ -64,6 +73,9 @@ WORKDIR /app
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Rebuild better-sqlite3 for the current platform
+RUN pnpm rebuild better-sqlite3
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
