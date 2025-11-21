@@ -153,12 +153,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/lib/db/schema.sql ./lib/db/schema
 # Copy axe-core for fallback injection
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
 
-# Copy package.json for better-sqlite3 rebuild
-COPY --from=builder /app/package.json ./package.json
+# Copy package.json and pnpm-lock.yaml for better-sqlite3 rebuild
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 
-# Rebuild better-sqlite3 for the runtime environment
-RUN pnpm install --prod --frozen-lockfile better-sqlite3 \
-    && pnpm rebuild better-sqlite3
+# Install only better-sqlite3 and rebuild for the runtime environment
+RUN pnpm add better-sqlite3@12.4.1 --prod
 
 # Create data directory for SQLite and set permissions
 RUN mkdir -p /app/data \
