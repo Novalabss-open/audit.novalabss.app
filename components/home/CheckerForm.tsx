@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { ScanResult, ScanError } from '@/lib/accessibility/types';
 import { PreviewModal } from '@/components/results/PreviewModal';
-import { EmailGateModal, type UserFormData } from '@/components/results/EmailGateModal';
+import { EmailGateModal } from '@/components/results/EmailGateModal';
+import type { User } from '@/lib/db/users';
 
 export function CheckerForm() {
   const [url, setUrl] = useState('');
@@ -21,7 +22,8 @@ export function CheckerForm() {
   // Check localStorage for authentication on mount
   useEffect(() => {
     const storedEmail = localStorage.getItem('userEmail');
-    if (storedEmail) {
+    const storedUserId = localStorage.getItem('userId');
+    if (storedEmail && storedUserId) {
       setIsAuthenticated(true);
     }
   }, []);
@@ -131,30 +133,17 @@ export function CheckerForm() {
     setShowEmailGate(true);
   };
 
-  const handleEmailSubmit = async (formData: UserFormData) => {
-    try {
-      // Store email in localStorage for passwordless auth
-      localStorage.setItem('userEmail', formData.email);
-      localStorage.setItem('userName', formData.name);
-      if (formData.whatsapp) {
-        localStorage.setItem('userWhatsapp', formData.whatsapp);
-      }
+  const handleEmailSuccess = (user: User) => {
+    // User is now authenticated (localStorage already updated by EmailGateModal)
+    setIsAuthenticated(true);
+    setShowEmailGate(false);
 
-      setIsAuthenticated(true);
-      setShowEmailGate(false);
-
-      // TODO: In FASE 7, call API to save user data to database
-      console.log('User data to save:', formData);
-
-      // TODO: In FASE 8, navigate to full results page
-      // For now, show alert
-      alert(
-        `✅ ¡Reporte desbloqueado!\n\nScore: ${scanResult?.score}/100\nProblemas encontrados: ${scanResult?.summary.total}\n\nEn la siguiente fase, esto te redireccionará a la página de resultados completos.`
-      );
-    } catch (err) {
-      console.error('Error saving user data:', err);
-      setError('❌ Error al procesar tus datos. Intenta de nuevo.');
-    }
+    // TODO: In FASE 8, navigate to full results page
+    // For now, show alert
+    console.log('User authenticated:', user);
+    alert(
+      `✅ ¡Reporte desbloqueado!\n\n¡Hola ${user.name}!\n\nScore: ${scanResult?.score}/100\nProblemas encontrados: ${scanResult?.summary.total}\n\nEn la siguiente fase (FASE 8), esto te redireccionará a la página de resultados completos.`
+    );
   };
 
   return (
@@ -250,7 +239,7 @@ export function CheckerForm() {
           <EmailGateModal
             isOpen={showEmailGate}
             onClose={() => setShowEmailGate(false)}
-            onSubmit={handleEmailSubmit}
+            onSuccess={handleEmailSuccess}
           />
         </>
       )}

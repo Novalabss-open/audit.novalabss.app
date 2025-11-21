@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,13 +11,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import type { User } from '@/lib/db/users';
+import type { CheckEmailResponse, RegisterResponse, ApiError } from '@/types/api';
 
 interface EmailGateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: UserFormData) => void;
-  isLoading?: boolean;
+  onSuccess: (user: User) => void;
 }
 
 export interface UserFormData {
@@ -28,11 +28,27 @@ export interface UserFormData {
   websiteUrl?: string;
 }
 
+// Debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 export function EmailGateModal({
   isOpen,
   onClose,
-  onSubmit,
-  isLoading = false,
+  onSuccess,
 }: EmailGateModalProps) {
   const [formData, setFormData] = useState<UserFormData>({
     email: '',
@@ -42,6 +58,55 @@ export function EmailGateModal({
     websiteUrl: '',
   });
   const [errors, setErrors] = useState<Partial<Record<keyof UserFormData, string>>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [emailExists, setEmailExists] = useState(false);
+  const [existingUser, setExistingUser] = useState<User | null>(null);
+
+  // Debounce email to avoid too many API calls
+  const debouncedEmail = useDebounce(formData.email, 500);
+
+  // Check email exists on blur or after debounce
+  const checkEmail = useCallback(async (email: string) => {
+    if (!email.trim()) {
+      setEmailExists(false);
+      setExistingUser(null);
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return;
+    }
+
+    setIsCheckingEmail(true);
+
+    try {
+      const response = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        const data: CheckEmailResponse = await response.json();
+        setEmailExists(data.exists);
+        setExistingUser(data.user || null);
+      }
+    } catch (error) {
+      console.error('Error checking email:', error);
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  }, []);
+
+  // Auto-check email when debounced value changes
+  useEffect(() => {
+    if (debouncedEmail) {
+      checkEmail(debouncedEmail);
+    }
+  }, [debouncedEmail, checkEmail]);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -84,24 +149,61 @@ export function EmailGateModal({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
       return;
     }
 
-    // Clean up website URL
-    let cleanedData = { ...formData };
-    if (formData.hasWebsite && formData.websiteUrl) {
-      let url = formData.websiteUrl.trim();
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://' + url;
-      }
-      cleanedData.websiteUrl = url;
-    }
+    setIsLoading(true);
 
-    onSubmit(cleanedData);
+    try {
+      // Call register API
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          name: formData.name.trim(),
+          whatsapp: formData.whatsapp?.trim() || undefined,
+          hasWebsite: formData.hasWebsite,
+          websiteUrl: formData.websiteUrl?.trim() || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData: ApiError = await response.json();
+
+        // Handle validation errors
+        if (errorData.details) {
+          setErrors(errorData.details as any);
+          return;
+        }
+
+        // Generic error
+        throw new Error(errorData.message || 'Error al registrar');
+      }
+
+      const data: RegisterResponse = await response.json();
+
+      // Save to localStorage for auto-login
+      localStorage.setItem('userEmail', data.user.email);
+      localStorage.setItem('userId', data.user.id.toString());
+
+      // Call success callback
+      onSuccess(data.user);
+
+      // Close modal
+      onClose();
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      setErrors({
+        email: 'Error al procesar el registro. Intenta de nuevo.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (field: keyof UserFormData, value: string | boolean) => {
@@ -121,10 +223,12 @@ export function EmailGateModal({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-2xl">
-            Desbloquea tu Reporte Completo
+            {emailExists ? '¡Bienvenido de vuelta!' : 'Desbloquea tu Reporte Completo'}
           </DialogTitle>
           <DialogDescription>
-            Ingresa tus datos para acceder a todos los detalles del análisis de accesibilidad
+            {emailExists
+              ? 'Te reconocemos. Solo confirma tu información.'
+              : 'Ingresa tus datos para acceder a todos los detalles del análisis de accesibilidad'}
           </DialogDescription>
         </DialogHeader>
 
@@ -134,18 +238,49 @@ export function EmailGateModal({
             <Label htmlFor="email">
               Email <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="tu@email.com"
-              value={formData.email}
-              onChange={(e) => handleChange('email', e.target.value)}
-              disabled={isLoading}
-              className={errors.email ? 'border-destructive' : ''}
-              autoComplete="email"
-            />
+            <div className="relative">
+              <Input
+                id="email"
+                type="email"
+                placeholder="tu@email.com"
+                value={formData.email}
+                onChange={(e) => handleChange('email', e.target.value)}
+                disabled={isLoading}
+                className={errors.email ? 'border-destructive' : ''}
+                autoComplete="email"
+              />
+              {isCheckingEmail && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <svg
+                    className="h-4 w-4 animate-spin text-muted-foreground"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                </div>
+              )}
+            </div>
             {errors.email && (
               <p className="text-sm text-destructive">{errors.email}</p>
+            )}
+            {emailExists && existingUser && (
+              <p className="text-sm text-primary">
+                ¡Hola {existingUser.name}! Te reconocemos.
+              </p>
             )}
           </div>
 
@@ -312,7 +447,7 @@ export function EmailGateModal({
 
           {/* Privacy note */}
           <p className="text-center text-xs text-muted-foreground">
-            No spam. Solo te enviamos contenido de valor sobre accesibilidad web.
+            🔒 No spam. Solo te enviamos contenido de valor sobre accesibilidad web.
           </p>
         </form>
       </DialogContent>
