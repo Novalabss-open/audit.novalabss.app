@@ -88,8 +88,14 @@ RUN pnpm run build
 # Stage 3: Runner
 FROM node:20-bookworm-slim AS runner
 
-# Install runtime dependencies for Chromium
+# Install runtime dependencies for Chromium AND build tools for better-sqlite3
 RUN apt-get update && apt-get install -y \
+    # Build tools for better-sqlite3
+    python3 \
+    make \
+    g++ \
+    gcc \
+    # Chromium
     chromium \
     chromium-sandbox \
     fonts-ipafont-gothic \
@@ -121,6 +127,9 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+# Install pnpm
+RUN npm install -g pnpm@latest
+
 WORKDIR /app
 
 # Set environment variables
@@ -144,10 +153,18 @@ COPY --from=builder --chown=nextjs:nodejs /app/lib/db/schema.sql ./lib/db/schema
 # Copy axe-core for fallback injection
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
 
+# Copy package.json for better-sqlite3 rebuild
+COPY --from=builder /app/package.json ./package.json
+
+# Rebuild better-sqlite3 for the runtime environment
+RUN pnpm install --prod --frozen-lockfile better-sqlite3 \
+    && pnpm rebuild better-sqlite3
+
 # Create data directory for SQLite and set permissions
 RUN mkdir -p /app/data \
     && chown -R nextjs:nodejs /app/data \
-    && chmod -R 755 /app/data
+    && chmod -R 755 /app/data \
+    && chown -R nextjs:nodejs /app/node_modules
 
 # Switch to non-root user
 USER nextjs
