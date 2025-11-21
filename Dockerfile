@@ -75,7 +75,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Rebuild better-sqlite3 for the current platform
-RUN pnpm rebuild better-sqlite3
+RUN pnpm rebuild better-sqlite3 && \
+    echo "=== Checking better-sqlite3 bindings ===" && \
+    find node_modules/.pnpm/better-sqlite3* -name "*.node" -o -name "build" -type d | head -20
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
