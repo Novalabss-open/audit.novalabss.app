@@ -1,14 +1,8 @@
 # Stage 1: Dependencies
 FROM node:20-bookworm-slim AS deps
 
-# Install system dependencies for Chromium and better-sqlite3
+# Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
-    # Python and build tools for better-sqlite3
-    python3 \
-    make \
-    g++ \
-    gcc \
-    # Chromium and its dependencies
     chromium \
     chromium-sandbox \
     # Font libraries
@@ -133,8 +127,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/lib/db/schema.sql ./lib/db/schema.sql
 
-# Copy axe-core for fallback injection
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
+# Copy axe-core for fallback injection (from deps stage which has full node_modules)
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/axe-core/axe.min.js ./public/axe.min.js
 
 # Create Chromium cache directory with permissions
 RUN mkdir -p /tmp/.chromium && \
