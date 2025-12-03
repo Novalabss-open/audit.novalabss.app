@@ -203,18 +203,37 @@ export async function scanUrl(url: string): Promise<ScanResult> {
       // Fallback: inject from local file in public directory
       console.log('CDN failed, using local axe-core from public directory');
 
-      // Try multiple possible paths (dev vs production)
-      let axeSource: string;
-      try {
-        // Production: Next.js standalone
-        axeSource = readFileSync(join(process.cwd(), 'public/axe.min.js'), 'utf8');
-      } catch {
+      // Try multiple possible paths for Next.js standalone vs development
+      const possiblePaths = [
+        join(process.cwd(), 'public/axe.min.js'),           // Standalone: same level as server.js
+        join(process.cwd(), '../public/axe.min.js'),         // Some deployment configs
+        join(__dirname, '../../public/axe.min.js'),          // Relative to this file
+        join(__dirname, '../../../public/axe.min.js'),       // Development build
+      ];
+
+      let axeSource: string | null = null;
+      let lastError: Error | null = null;
+
+      for (const path of possiblePaths) {
         try {
-          // Development or alternative path
-          axeSource = readFileSync(join(process.cwd(), '../public/axe.min.js'), 'utf8');
-        } catch {
-          // Last resort: try node_modules
-          axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+          axeSource = readFileSync(path, 'utf8');
+          console.log(`Successfully loaded axe-core from: ${path}`);
+          break;
+        } catch (err) {
+          lastError = err as Error;
+          continue;
+        }
+      }
+
+      // If all paths failed, try require.resolve as last resort
+      if (!axeSource) {
+        try {
+          const resolvedPath = require.resolve('axe-core/axe.min.js');
+          axeSource = readFileSync(resolvedPath, 'utf8');
+          console.log(`Successfully loaded axe-core from node_modules: ${resolvedPath}`);
+        } catch (err) {
+          console.error('Failed to load axe-core from all paths:', lastError);
+          throw new Error('Could not load axe-core library from any location');
         }
       }
 
